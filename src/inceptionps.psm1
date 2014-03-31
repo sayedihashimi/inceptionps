@@ -92,13 +92,13 @@ function New-HtmlElement{
         while($args){
             $attrib, $value, $args = $args
 
+            # TODO: needs clean up
             if($args -ne $null){
                 # don't write this out until all attributes have been added
                 $htmlWriter.RenderBeginTag($tag)
                 $pendingWriteBeginTag = $false
-            }
-            
-            if($attrib -is [ScriptBlock]){
+            }            
+            elseif($attrib -is [ScriptBlock]){
                 if($pendingWriteBeginTag){
                     $htmlWriter.RenderBeginTag($tag)
                     $pendingWriteBeginTag = $false;
@@ -117,6 +117,13 @@ function New-HtmlElement{
             }
             elseif($value -ne $null) {
                 $htmlWriter.AddAttribute($attrib.TrimStart("-").TrimEnd(':'),$value)
+            }
+            elseif($attrib -is [string]){
+                if($pendingWriteBeginTag){
+                    $htmlWriter.RenderBeginTag($tag)
+                    $pendingWriteBeginTag = $false;
+                }
+                $htmlWriter.Write($attrib)
             }
         }
         
@@ -181,8 +188,12 @@ function ConverFrom-HtmlDsl {
         $previousToken = $null
         $lineOffset = 0
         foreach($t in $global:tokens){            
+
             if($previousToken -ne $null -and ($previousToken.StartLine -ne $t.StartLine)){
                 $lineOffset = 0
+            }
+            else{
+                $lineOffset = $ScriptText[($t.StartLine -1)].Length - $OriginalScript[($t.StartLine -1)].Length
             }
 
             if($t.Type -eq "Command" -and !$t.Content.Contains('-') -and ($(Get-Command $t.Content -Type Cmdlet,Function,ExternalScript -EA 0) -eq $Null)){
@@ -191,24 +202,24 @@ function ConverFrom-HtmlDsl {
             elseif($t.Type -eq 'String'){
                 if($previousToken -ne $null) {
 
-                    if($previousToken.Type -ne 'CommandParameter') {
-                        $ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Insert( $t.StartColumn+$lineOffset -1, "wht " )
-                    }
-
-                    if($previousToken.Type -eq 'CommandParameter') {
+                    if($previousToken.Type -eq 'Command'){  }
+                    elseif($previousToken.Type -eq 'CommandParameter') {
                         # overwrite the previous token as well as this one with a call to wha
                         # convert     nhe script -src 'http://foo.js' ->     nhe script ; { wha src 'http://foo.js' }
                         #$ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Remove(($previousToken.StartColumn+$lineOffSet - 1),1).Insert(($previousToken.StartColumn+$lineOffset - 1),'{ wha ') + '}'
 
-
                         #     nhe script -src 'http://foo.js'
+                        $foo= 'bar'
+                    }
+                    elseif($previousToken.Type -ne 'CommandParameter') {
+                        $ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Insert( $t.StartColumn+$lineOffset -1, "wht " )
                     }
                 }
             }
 
             if($previousToken -ne $null -and $previousToken.StartLine -eq $t.StartLine){
                 # we need to add the number of new characters to the lineoffset variable
-                $lineOffset = $ScriptText[($t.StartLine -1)].Length - $OriginalScript[($t.StartLine -1)].Length
+                #$lineOffset = $ScriptText[($t.StartLine -1)].Length - $OriginalScript[($t.StartLine -1)].Length
             }
             
             $previousToken = $t
