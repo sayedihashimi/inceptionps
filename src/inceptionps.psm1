@@ -55,9 +55,9 @@ function New-HtmlDocument {
                 $attrib = ConverFrom-HtmlDsl $attrib
                 &$attrib
             }
-            elseif ( $value -is [ScriptBlock] -and "-CONTENT".StartsWith($attrib.TrimEnd(':').ToUpper())){
+            elseif ( $value -is [ScriptBlock] <#-and "-CONTENT".StartsWith($attrib.TrimEnd(':').ToUpper())#>){
                 $value = ConverFrom-HtmlDsl $value
-                &value
+                &$value
             }            
         }
 
@@ -88,19 +88,28 @@ function New-HtmlElement{
         'new-HtmlElement [{0}]' -f $tag | Write-Verbose
 
         $htmlWriter = $script:currentHtmlWriter
-        
+        $pendingWriteBeginTag = $true
         while($args){
             $attrib, $value, $args = $args
 
-            if($args -eq $null){
+            if($args -ne $null){
                 # don't write this out until all attributes have been added
                 $htmlWriter.RenderBeginTag($tag)
+                $pendingWriteBeginTag = $false
             }
-
+            
             if($attrib -is [ScriptBlock]){
+                if($pendingWriteBeginTag){
+                    $htmlWriter.RenderBeginTag($tag)
+                    $pendingWriteBeginTag = $false;
+                }
                 &$attrib
             }
             elseif ($value -is [ScriptBlock] -and "-CONTENT".StartsWith($attrib.TrimEnd(':').ToUpper())) { # then it's content
+                if($pendingWriteBeginTag){
+                    $htmlWriter.RenderBeginTag($tag)
+                    $pendingWriteBeginTag = $false;
+                }
                 &$value
             }
             elseif($value -match "-(?!\d)\w") { # TODO: Do we need this?
@@ -111,6 +120,10 @@ function New-HtmlElement{
             }
         }
         
+        if($pendingWriteBeginTag){
+            $htmlWriter.RenderBeginTag($tag)
+        }
+
         $htmlWriter.RenderEndTag()
     }
 }
@@ -184,7 +197,11 @@ function ConverFrom-HtmlDsl {
 
                     if($previousToken.Type -eq 'CommandParameter') {
                         # overwrite the previous token as well as this one with a call to wha
-                        $ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Remove(($previousToken.StartColumn+$lineOffSet - 1),1).Insert(($previousToken.StartColumn+$lineOffset - 1),'{ wha ') + '}'
+                        # convert     nhe script -src 'http://foo.js' ->     nhe script ; { wha src 'http://foo.js' }
+                        #$ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Remove(($previousToken.StartColumn+$lineOffSet - 1),1).Insert(($previousToken.StartColumn+$lineOffset - 1),'{ wha ') + '}'
+
+
+                        #     nhe script -src 'http://foo.js'
                     }
                 }
             }

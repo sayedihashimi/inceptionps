@@ -22,11 +22,20 @@ else{
 	return
 }
 
+New-HtmlDocument head { title {'title value'} }
 <#
 New-HtmlDocument {
     script -src 'http://foo.js'
 }
+
+New-HtmlDocument {
+    head {
+        title {"title here"}
+        script -src 'http://foo.js'
+    }
+}
 #>
+<#
 New-HtmlDocument {
     head {
         title {"title here"}
@@ -44,10 +53,9 @@ New-HtmlDocument {
         footer {'footer here'}
     }
 }
+#>
+
 
 $foo = 'bar'
 
 
-
-<#
-#>
