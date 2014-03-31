@@ -3,7 +3,18 @@ param()
 
 # Based on XmlDsl by Joel Bennett http://huddledmasses.org/a-dsl-for-xml-in-powershell-new-xdocument/
 
-# TODO: Should this be here?
+function Get-ScriptDirectory
+{
+    $Invocation = (Get-Variable MyInvocation -Scope 1).Value
+    Split-Path $Invocation.MyCommand.Path
+}
+
+$scriptDir = ((Get-ScriptDirectory) + "\")
+$zenCodingAssembly = (Join-Path -Path ((Get-ChildItem $scriptDir).Directory.Parent.FullName) -ChildPath 'tools\ZenCoding.dll')
+'path :[{0}]' -f $zenCodingAssembly | Write-Host
+
+Add-Type -Path $zenCodingAssembly
+
 Add-Type -AssemblyName 'System.Web'
 $acceleratorsType = [PSObject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
 $accelerators = ($acceleratorsType::Get)
@@ -164,6 +175,20 @@ function Write-HtmlAttribute{
 }
 Set-Alias wha Write-HtmlAttribute
 
+function Write-Emmet{
+    [cmdletbinding()]
+    param(
+        [Parameter(Mandatory=$true,Position=0)]
+        $expression
+    )
+    process{
+        $parser = New-Object 'ZenCoding.HtmlParser'
+        Write-HtmlText -text $parser.Parse($expression)        
+    }
+}
+
+Set-Alias emmet Write-Emmet
+
 function ConverFrom-HtmlDsl {
     [cmdletbinding()]
     param(
@@ -172,14 +197,7 @@ function ConverFrom-HtmlDsl {
     )
     process{
         $parserrors = $null
-        $global:tokens = [PSParser]::Tokenize( $script, [ref]$parserrors )
-        
-        # find all command tokens which don't exist
-        [Array]$duds = $global:tokens | Where-Object { 
-            ($_.Type -eq "Command" -and !$_.Content.Contains('-') -and ($(Get-Command $_.Content -Type Cmdlet,Function,ExternalScript -EA 0) -eq $Null) ) -or
-            ($_.Type -eq 'String')}
-
-        [Array]::Reverse( $duds )
+        $global:tokens = [PSParser]::Tokenize( $script, [ref]$parserrors)
 
         [string[]]$ScriptText = "$script" -split "`n"
         [string[]]$OriginalScript = "$script" -split "`n"
@@ -188,7 +206,6 @@ function ConverFrom-HtmlDsl {
         $previousToken = $null
         $lineOffset = 0
         foreach($t in $global:tokens){            
-
             if($previousToken -ne $null -and ($previousToken.StartLine -ne $t.StartLine)){
                 $lineOffset = 0
             }
@@ -196,20 +213,16 @@ function ConverFrom-HtmlDsl {
                 $lineOffset = $ScriptText[($t.StartLine -1)].Length - $OriginalScript[($t.StartLine -1)].Length
             }
 
-            if($t.Type -eq "Command" -and !$t.Content.Contains('-') -and ($(Get-Command $t.Content -Type Cmdlet,Function,ExternalScript -EA 0) -eq $Null)){
+            if($t.Type -eq "Command" -and !$t.Content.Contains('-') -and ($(Get-Command $t.Content -Type Cmdlet,Function,ExternalScript,Alias -EA 0) -eq $Null)){
                 $ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Insert( $t.StartColumn+$lineOffset -1, "nhe " )
             }
             elseif($t.Type -eq 'String'){
                 if($previousToken -ne $null) {
-
-                    if($previousToken.Type -eq 'Command'){  }
+                    if($previousToken.Type -eq 'Command'){
+                        # leave it as is
+                    }
                     elseif($previousToken.Type -eq 'CommandParameter') {
-                        # overwrite the previous token as well as this one with a call to wha
-                        # convert     nhe script -src 'http://foo.js' ->     nhe script ; { wha src 'http://foo.js' }
-                        #$ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Remove(($previousToken.StartColumn+$lineOffSet - 1),1).Insert(($previousToken.StartColumn+$lineOffset - 1),'{ wha ') + '}'
-
-                        #     nhe script -src 'http://foo.js'
-                        $foo= 'bar'
+                        # leave it as is
                     }
                     elseif($previousToken.Type -ne 'CommandParameter') {
                         $ScriptText[($t.StartLine - 1)] = $ScriptText[($t.StartLine - 1)].Insert( $t.StartColumn+$lineOffset -1, "wht " )
@@ -217,11 +230,6 @@ function ConverFrom-HtmlDsl {
                 }
             }
 
-            if($previousToken -ne $null -and $previousToken.StartLine -eq $t.StartLine){
-                # we need to add the number of new characters to the lineoffset variable
-                #$lineOffset = $ScriptText[($t.StartLine -1)].Length - $OriginalScript[($t.StartLine -1)].Length
-            }
-            
             $previousToken = $t
         }
 

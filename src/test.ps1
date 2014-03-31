@@ -30,8 +30,8 @@ New-HtmlDocument {
 #>
 
 New-HtmlDocument {
-    head {
-        script -src 'http://foo.js'
+    body {
+        emmet 'div>ul>li'
     }
 }
 
